@@ -1,0 +1,55 @@
+* ============================================================
+* MAGLEV - FORMA CANONICA CONTROLABLE (corregida, valores escalados) - version con el ADTL084 REAL de LTspice
+* x3' = 196200 x1 + 1962 x2 - 100 x3 + u ;  Y = -280.14 x1
+* Integradores Deboo: R=45.15k, C=1u  ->  w0 = 2/(R*C) = sqrt(1962) rad/s
+* Escalado: pesos = a_i/w0^k ; u entra con 0.0032236 ; Y = -X1
+* Designadores = los de tu esquema (U1..U5, R1..R21); U22..U24 son los inversores nuevos
+* ============================================================
+
+V1 VCC 0 8
+V2 0 VEE 8
+V3 U 0 PULSE(0 1 0 1u 1u 10 20)
+* --- inversores unitarios: -U, -X1, -X2 (nuevos)
+XU22 0 m22 VCC VEE NU ADTL084
+R101 U m22 10k
+R102 NU m22 10k
+XU23 0 m23 VCC VEE NX1 ADTL084
+R103 X1 m23 10k
+R104 NX1 m23 10k
+XU24 0 m24 VCC VEE NX2 ADTL084
+R105 X2 m24 10k
+R106 NX2 m24 10k
+* --- sumador U4 (inversor, Rf=R15=10k, entrada + a tierra)
+XU4 0 N14 VCC VEE S ADTL084
+R15 S N14 10k
+R17 X3 N14 4.429k
+R18 NX2 N14 10k
+R19 NX1 N14 4.429k
+R107 NU N14 3.102Meg
+* --- integradores Deboo: U1 -> X3, U2 -> X2, U3 -> X1
+R4 S N1 45.15k
+R2 X3 N1 45.15k
+C1 N1 0 1u
+R1 N2 0 200k
+R3 X3 N2 200k
+XU1 N1 N2 VCC VEE X3 ADTL084
+R8 X3 N7 45.15k
+R6 X2 N7 45.15k
+C2 N7 0 1u
+R5 N8 0 200k
+R7 X2 N8 200k
+XU2 N7 N8 VCC VEE X2 ADTL084
+R12 X2 N10 45.15k
+R10 X1 N10 45.15k
+C3 N10 0 1u
+R9 N11 0 200k
+R11 X1 N11 200k
+XU3 N10 N11 VCC VEE X1 ADTL084
+* --- salida U5: inversor (R20 eliminada), Y = -X1
+XU5 0 N17 VCC VEE Y ADTL084
+R13 X1 N17 10k
+R21 Y N17 10k
+.lib ADTL084.lib
+.tran 0 0.2 0 100u
+;  Si algo no arranca, prueba en su lugar:   .tran 0 0.2 0 100u uic
+.end

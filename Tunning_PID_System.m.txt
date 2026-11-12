@@ -1,0 +1,18 @@
+g=0.1;
+xi=0.35;
+w0=1;
+wn=2;
+num=1;
+den=[1 2*g*w0 w0^(2)];
+s1=-5*xi*wn;
+s2=-xi*wn+wn*sqrt(1-xi^(2))*i;
+s3=-xi*wn-wn*sqrt(1-xi^(2))*i;
+P=poly([s1 s2 s3]);
+kd=P(2)-2*g*w0;
+kp=P(3)-w0^(2);
+ki=P(4);
+num_r=[kd kp ki];
+den_r=P;
+step(num,den);
+hold on
+step(num_r,den_r);
