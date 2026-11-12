@@ -6,7 +6,7 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #0d1117; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* Modificado: Se removió pointer-events: none para permitir arrastrar y se agregó un cursor */
+        /* Panel Físico Original */
         #panel {
             position: absolute; top: 15px; left: 15px; color: #ffffff;
             background: rgba(10, 20, 30, 0.85); padding: 20px; border-radius: 12px;
@@ -15,9 +15,42 @@
             cursor: move;
         }
         #panel h3 { margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; color: #e2e8f0; cursor: move; }
-        .data-row { display: flex; justify-content: space-between; margin: 8px 0; }
+        .data-row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 14px; }
         .data-label { color: #a0aec0; }
+        .mono-val { font-family: monospace; font-weight: bold; }
         
+        /* Nuevo Panel de Osciloscopio Arrastrable */
+        #scope_panel {
+            position: absolute; top: 15px; right: 15px; color: #ffffff;
+            background: rgba(10, 20, 30, 0.85); padding: 15px; border-radius: 12px;
+            border: 1px solid #4a5568; width: 300px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 10;
+            cursor: move;
+        }
+        #scope_panel h3 { margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; color: #68d391; cursor: move; font-size: 16px; }
+        
+        /* Contenedor del Canvas para el Osciloscopio */
+        .scope-container {
+            background: #000000;
+            border: 2px solid #2d3748;
+            border-radius: 8px;
+            padding: 5px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        #scopeCanvas {
+            width: 100%;
+            height: 160px;
+            display: block;
+            background: radial-gradient(circle, #112211 0%, #000000 100%);
+        }
+        .scope-legend {
+            display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; margin-bottom: 5px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .box-color { width: 10px; height: 10px; display: inline-block; border-radius: 2px; }
+
+        /* Panel de Controles Original */
         #controls {
             position: absolute; bottom: 20px; right: 20px;
             background: rgba(255,255,255,0.95); padding: 20px; border-radius: 12px;
@@ -25,7 +58,6 @@
             width: 320px; z-index: 10;
             cursor: move;
         }
-        /* Prevenir que los controles internos interfieran con el arrastre */
         input[type=range], button, .toggle-container { cursor: pointer; }
         
         .toggle-container {
@@ -42,19 +74,39 @@
         }
         #btn_reset:hover { background: #005cc5; }
     </style>
-    <!-- Three.js y OrbitControls para la rotación 360 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
+    <!-- Ventana 1: Estados Físicos -->
     <div id="panel">
         <h3>Dinámica del Maglev</h3>
-        <div class="data-row"><span class="data-label">Posición (x1):</span> <span id="val_x1"></span> cm</div>
-        <div class="data-row"><span class="data-label">Velocidad (x2):</span> <span id="val_x2"></span> cm/s</div>
-        <div class="data-row"><span class="data-label">Corriente (x3):</span> <span id="val_x3"></span> A</div>
-        <div class="data-row"><span class="data-label">Voltaje Op-Amp (u):</span> <span id="val_real_u" style="color: #ffaa00; font-weight: bold;"></span> V</div>
+        <div class="data-row"><span class="data-label">Posición (x1):</span> <span id="val_x1" class="mono-val"></span> cm</div>
+        <div class="data-row"><span class="data-label">Velocidad (x2):</span> <span id="val_x2" class="mono-val"></span> cm/s</div>
+        <div class="data-row"><span class="data-label">Corriente (x3):</span> <span id="val_x3" class="mono-val"></span> A</div>
+        <div class="data-row"><span class="data-label">Voltaje Op-Amp (u):</span> <span id="val_real_u" class="mono-val" style="color: #ffaa00;"></span> V</div>
     </div>
 
+    <!-- Ventana 2: Osciloscopio Canónico -->
+    <div id="scope_panel">
+        <h3>Osciloscopio Canónico</h3>
+        
+        <div class="scope-legend">
+            <div class="legend-item"><span class="box-color" style="background: #00ffcc;"></span> Salida Real (Δy)</div>
+            <div class="legend-item"><span class="box-color" style="background: #ffaa00;"></span> Referencia (Set)</div>
+        </div>
+        
+        <div class="scope-container">
+            <canvas id="scopeCanvas" width="286" height="160"></canvas>
+        </div>
+
+        <div class="data-row" style="border-top: 1px solid #4a5568; padding-top: 8px; margin-bottom: 0;">
+            <span class="data-label">Salida Actual (Δy):</span> 
+            <span id="val_dy" class="mono-val" style="color: #00ffcc; text-shadow: 0 0 5px #00ffcc;">0.00 cm</span>
+        </div>
+    </div>
+
+    <!-- Ventana 3: Controles -->
     <div id="controls">
         <div id="btn_toggle" class="toggle-container off">
             ESTADO: LAZO ABIERTO (Inestable)
@@ -74,15 +126,11 @@
             element.onmousedown = dragMouseDown;
 
             function dragMouseDown(e) {
-                // Evitar arrastrar si se hace clic en un botón o slider
-                if(['INPUT', 'BUTTON', 'DIV'].includes(e.target.tagName) && e.target !== element && e.target.id !== 'btn_toggle' && !e.target.parentElement.classList.contains('data-row')) {
-                    if (e.target.id === 'btn_toggle' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-                }
+                if (e.target.id === 'btn_toggle' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'CANVAS') return;
                 e.preventDefault();
                 pos3 = e.clientX;
                 pos4 = e.clientY;
                 
-                // Convertir bottom/right a top/left al iniciar el arrastre para evitar saltos
                 let rect = element.getBoundingClientRect();
                 element.style.bottom = 'auto';
                 element.style.right = 'auto';
@@ -110,14 +158,82 @@
         }
 
         makeDraggable(document.getElementById("panel"));
+        makeDraggable(document.getElementById("scope_panel"));
         makeDraggable(document.getElementById("controls"));
 
-        // --- 1. CONFIGURACIÓN VISUAL 3D ---
+        // --- LÓGICA DEL OSCILOSCOPIO ---
+        const canvas = document.getElementById('scopeCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Buffers para la gráfica
+        const maxPoints = width; 
+        const dataY = new Array(maxPoints).fill(0); // Salida del sistema Δy
+        const dataRef = new Array(maxPoints).fill(0); // Referencia (Setpoint)
+        let scopeIndex = 0;
+
+        function drawOscilloscope() {
+            // Limpiar fondo con un ligero trazo negro para efecto de desvanecimiento (ghosting)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Dibujar la cuadrícula (Grid)
+            ctx.strokeStyle = '#1a361a';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let i = 0; i < width; i += 20) { ctx.moveTo(i, 0); ctx.lineTo(i, height); }
+            for(let i = 0; i < height; i += 20) { ctx.moveTo(0, i); ctx.lineTo(width, i); }
+            ctx.stroke();
+            
+            // Línea central (0 cm / Punto de equilibrio)
+            ctx.strokeStyle = '#387c38';
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+
+            // Dibujar Referencia (Setpoint) - Naranja
+            ctx.beginPath();
+            ctx.strokeStyle = '#ffaa00';
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < maxPoints; i++) {
+                let idx = (scopeIndex + i) % maxPoints;
+                // Escalar: Rango de visualización de -3cm a +3cm en el scope
+                let yPos = height/2 - (dataRef[idx] * (height/6)); 
+                if (i === 0) ctx.moveTo(i, yPos);
+                else ctx.lineTo(i, yPos);
+            }
+            ctx.stroke();
+
+            // Dibujar Señal Canónica de Salida (Δy) - Cyan Brillante
+            ctx.beginPath();
+            ctx.strokeStyle = '#00ffcc';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#00ffcc';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < maxPoints; i++) {
+                let idx = (scopeIndex + i) % maxPoints;
+                let yPos = height/2 - (dataY[idx] * (height/6));
+                
+                // Limitar visualmente si se sale de la pantalla
+                yPos = Math.max(0, Math.min(height, yPos));
+                
+                if (i === 0) ctx.moveTo(i, yPos);
+                else ctx.lineTo(i, yPos);
+            }
+            ctx.stroke();
+            
+            // Resetear sombra para no afectar otras cosas
+            ctx.shadowBlur = 0;
+        }
+
+        // --- 1. CONFIGURACIÓN VISUAL 3D (INTACTA) ---
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x0d1117, 4); 
         
         const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 0.08, 0.3); // Cámara un poco más alejada para ver el soporte
+        camera.position.set(0, 0.08, 0.3);
         camera.lookAt(0, 0, 0);
         
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -125,13 +241,11 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // --- CONTROLADOR DE ÓRBITA PARA ROTACIÓN 360 ---
         const orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
-        orbitControls.enableDamping = true; // Movimiento suave
+        orbitControls.enableDamping = true;
         orbitControls.dampingFactor = 0.05;
         orbitControls.target.set(0, 0, 0);
 
-        // ILUMINACIÓN
         scene.add(new THREE.AmbientLight(0xffffff, 0.6)); 
         const topLight = new THREE.SpotLight(0xffffff, 2);
         topLight.position.set(0.1, 0.3, 0.1);
@@ -146,10 +260,8 @@
         gridHelper.position.y = -0.075;
         scene.add(gridHelper);
 
-        // --- ESTRUCTURA DE SOPORTE DEL MAGLEV ---
         const standMat = new THREE.MeshPhongMaterial({ color: 0x444444, shininess: 30, specular: 0x222222 });
         
-        // Base redonda
         const baseGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.005, 32);
         const base = new THREE.Mesh(baseGeo, standMat);
         base.position.set(0, -0.0725, 0);
@@ -157,23 +269,20 @@
         base.receiveShadow = true;
         scene.add(base);
 
-        // Pilar vertical posterior
         const pillarGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.14, 16);
         const pillar = new THREE.Mesh(pillarGeo, standMat);
         pillar.position.set(0, -0.005, -0.04);
         pillar.castShadow = true;
         scene.add(pillar);
 
-        // Brazo horizontal superior
         const armGeo = new THREE.BoxGeometry(0.02, 0.015, 0.05);
         const arm = new THREE.Mesh(armGeo, standMat);
         arm.position.set(0, 0.057, -0.015);
         arm.castShadow = true;
         scene.add(arm);
 
-        // --- IMÁN ---
         const magnet = new THREE.Group();
-        magnet.position.set(0, 0.035, 0); // Conectado al extremo del brazo
+        magnet.position.set(0, 0.035, 0);
 
         const topGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.015, 32);
         const topMat = new THREE.MeshPhongMaterial({ color: 0xff1111, shininess: 100, specular: 0x444444 });
@@ -191,14 +300,12 @@
 
         scene.add(magnet);
 
-        // Esfera
         const sphereGeo = new THREE.SphereGeometry(0.008, 32, 32);
         const sphereMat = new THREE.MeshPhongMaterial({ color: 0xdcdcdc, specular: 0xffffff, shininess: 150 });
         const sphere = new THREE.Mesh(sphereGeo, sphereMat);
         sphere.castShadow = true;
         scene.add(sphere);
 
-        // Anillo holográfico
         const targetGeo = new THREE.TorusGeometry(0.012, 0.001, 16, 32);
         const targetMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.7 });
         const targetRing = new THREE.Mesh(targetGeo, targetMat);
@@ -206,7 +313,6 @@
         targetRing.visible = false;
         scene.add(targetRing);
 
-        // Sistema de Estela
         const trailDotsCount = 20; 
         const trailMeshes = [];
         const dotGeo = new THREE.SphereGeometry(0.0015, 8, 8);
@@ -224,7 +330,7 @@
         }
         let frameCounter = 0;
 
-        // --- 2. FÍSICA Y CONTROLADOR ---
+        // --- 2. FÍSICA Y CONTROLADOR (INTACTOS) ---
         const m = 0.05, g = 9.81, k = 1e-4, R = 10.0, L = 0.1;
         let x1 = 0.01, x2 = 0.0, x3 = 0.70035; 
         let u = 7.00; 
@@ -251,6 +357,9 @@
             }
             
             trailMeshes.forEach(dot => dot.visible = false);
+            // Limpiar gráfica al resetear
+            dataY.fill(0);
+            dataRef.fill(0);
         }
 
         btnReset.addEventListener('click', resetPosition);
@@ -309,10 +418,8 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // Actualizar rotación de cámara
             orbitControls.update();
 
-            // Bucle físico
             for (let i = 0; i < subSteps; i++) {
                 if (isClosedLoop) {
                     u = computeControllerVoltage();
@@ -334,7 +441,6 @@
             sphere.position.y = magnet.position.y - 0.015 - x1;
             targetRing.position.y = magnet.position.y - 0.015 - setpoint;
 
-            // Actualizar Estela Punteada
             frameCounter++;
             if (frameCounter % 3 === 0) {
                 for (let i = trailMeshes.length - 1; i > 0; i--) {
@@ -355,11 +461,28 @@
                 }
             }
 
-            // Actualizar panel
+            // Actualizar panel físico de texto
             document.getElementById('val_x1').innerText = (x1 * 100).toFixed(2);
             document.getElementById('val_x2').innerText = (x2 * 100).toFixed(2);
             document.getElementById('val_x3').innerText = x3.toFixed(3);
             document.getElementById('val_real_u').innerText = u.toFixed(2);
+
+            // --- ACTUALIZACIÓN DEL OSCILOSCOPIO CANÓNICO ---
+            // Calcular desviación respecto al punto de equilibrio (0.01 m)
+            let deltaY_cm = (x1 - 0.01) * 100;
+            let deltaRef_cm = (setpoint - 0.01) * 100;
+            
+            // Si está en lazo abierto y muy inestable, lo acotamos visualmente para que no dañe la gráfica
+            if (deltaY_cm > 15) deltaY_cm = 15;
+
+            // Inyectar datos al buffer circular
+            dataY[scopeIndex] = deltaY_cm;
+            dataRef[scopeIndex] = isClosedLoop ? deltaRef_cm : (u - 7.00); // En abierto mostramos la variación de voltaje como ref
+            scopeIndex = (scopeIndex + 1) % maxPoints;
+
+            // Renderizar la gráfica y actualizar el texto de salida
+            drawOscilloscope();
+            document.getElementById('val_dy').innerText = (deltaY_cm).toFixed(2) + " cm";
 
             renderer.render(scene, camera);
         }
